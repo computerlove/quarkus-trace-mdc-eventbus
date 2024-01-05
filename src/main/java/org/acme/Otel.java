@@ -4,11 +4,21 @@ import io.opentelemetry.api.trace.*;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import io.quarkus.opentelemetry.runtime.QuarkusContextStorage;
-import org.slf4j.MDC;
+import jakarta.enterprise.context.ApplicationScoped;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 
+@ApplicationScoped
 public class Otel {
-    public static AutoCloseable getOtelContext(Tracer tracer, int message) {
+    private final boolean doManual;
+    private final Tracer tracer;
+
+    public Otel(@ConfigProperty(name = "context.manual") boolean doManual, Tracer tracer) {
+        this.doManual = doManual;
+        this.tracer = tracer;
+    }
+
+    public AutoCloseable getOtelContext(int message) {
         Context current = Context.current();
         Span span = tracer.spanBuilder("servicebus message")
                 .setAttribute("message", message)
@@ -26,12 +36,16 @@ public class Otel {
         };
     }
 
-    public static AutoCloseable fromTraceParent(String traceparent) {
-        Context current = QuarkusContextStorage.INSTANCE.current() == null ?  Context.current() : QuarkusContextStorage.INSTANCE.current();
-        String[] split = traceparent.split("-");
-        SpanContext spanContext = SpanContext.createFromRemoteParent(split[1], split[2], TraceFlags.getDefault(), TraceState.getDefault());
-        Span activeSpan = Span.wrap(spanContext);
-        Context with = current.with(activeSpan);
-        return makeContext(with, activeSpan);
+    public AutoCloseable fromTraceParent(String traceparent) {
+        if(doManual) {
+            Context current = QuarkusContextStorage.INSTANCE.current() == null ? Context.current() : QuarkusContextStorage.INSTANCE.current();
+            String[] split = traceparent.split("-");
+            SpanContext spanContext = SpanContext.createFromRemoteParent(split[1], split[2], TraceFlags.getDefault(), TraceState.getDefault());
+            Span activeSpan = Span.wrap(spanContext);
+            Context with = current.with(activeSpan);
+            return makeContext(with, activeSpan);
+        } else {
+            return () -> {};
+        }
     }
 }

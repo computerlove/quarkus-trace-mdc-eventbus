@@ -17,17 +17,20 @@ import org.jboss.logging.Logger;
 public class Listener {
     private final Logger log;
     private final HelloClient helloClient;
+    private final Otel tracer;
 
     public Listener(Logger log,
-                    @RestClient HelloClient helloClient) {
+                    @RestClient HelloClient helloClient,
+                    Otel tracer) {
         this.log = log;
         this.helloClient = helloClient;
+        this.tracer = tracer;
     }
 
     @ConsumeEvent(value = HelloEvent.NAME, blocking = true)
     public void listen(MultiMap headers, HelloEvent helloEvent) {
         String traceparent = headers.get("traceparent");
-        try(var context = Otel.fromTraceParent(traceparent)) {
+        try(var context = tracer.fromTraceParent(traceparent)) {
             log.infof("fromTraceParent %s %s", headers, helloEvent);
             String hello = helloClient.hello(helloEvent.hello() + " fromTraceParent");
             log.info(hello);
